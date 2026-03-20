@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Generate beautiful gradient wallpapers locally. Customize colors, chaos, grain, and download in any resolution." />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>Gradiant — Wallpaper Generator</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+</head>
+<body>
+  <!-- ─── HEADER ─── -->
+  <header class="app-header">
+    <div class="logo">
+      <div class="logo-icon">G</div>
+      <span>Gradiant</span>
+    </div>
+    <div class="header-actions">
+      <span class="kbd-hint">SPACE — New Wallpaper</span>
+    </div>
+  </header>
+
+  <!-- ─── MAIN ─── -->
+  <main class="app-main">
+    <!-- Preview Area -->
+    <section class="preview-area" id="preview-area">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <canvas id="preview-canvas" width="800" height="600"></canvas>
+        <div class="canvas-overlay">
+          <span class="canvas-overlay-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            Click to Fullscreen
+          </span>
+        </div>
+        <div class="generating-overlay" id="generating-overlay">
+          <div class="generating-spinner"></div>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-primary" id="btn-generate">
+          <span class="btn-icon">⟳</span> Generate
+        </button>
+        <button class="btn" id="btn-download-open">
+          <span class="btn-icon">↓</span> Download
+        </button>
+        <button class="btn" id="btn-fullscreen">
+          <span class="btn-icon">⛶</span> Fullscreen
+        </button>
+      </div>
+    </section>
+
+    <!-- Controls Panel -->
+    <aside class="controls-panel" id="controls-panel">
+      <!-- Colors Section -->
+      <div class="section" id="section-colors">
+        <div class="section-header">
+          <span class="section-title">Colors</span>
+          <span class="section-badge" id="color-count">5 colors</span>
+        </div>
+        <div class="color-list" id="color-list">
+          <!-- Dynamically generated -->
+        </div>
+        <div class="color-actions">
+          <button class="btn" id="btn-add-color">+ Add</button>
+          <div class="random-group">
+            <button class="btn" id="btn-random-palette">🎲 Random</button>
+            <input type="number" class="color-count-input" id="random-color-count" value="5" min="2" max="10" title="Number of colors" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Chaos Factor -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Chaos Factor</span>
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">Distortion</span>
+            <span class="slider-value" id="chaos-value">30</span>
+          </div>
+          <input type="range" id="chaos-slider" min="0" max="100" value="30" />
+        </div>
+      </div>
+
+      <!-- Grain Factor -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Grain Factor</span>
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">Texture</span>
+            <span class="slider-value" id="grain-value">15</span>
+          </div>
+          <input type="range" id="grain-slider" min="0" max="100" value="15" />
+        </div>
+      </div>
+
+      <!-- Auto Generate -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Auto Generate</span>
+        </div>
+        <div class="auto-gen-row">
+          <span class="slider-label">Auto-cycle wallpapers</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="auto-gen-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="auto-gen-interval" id="auto-gen-interval">
+          <span class="interval-label">Every</span>
+          <input type="number" class="interval-input" id="auto-gen-seconds" value="3" min="1" max="60" />
+          <span class="interval-label">seconds</span>
+        </div>
+      </div>
+
+      <!-- Palette Tones -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Tones</span>
+          <span class="section-badge" id="active-tone-badge">none</span>
+        </div>
+        <div class="tone-grid" id="palette-presets">
+          <button class="ratio-btn preset-btn" data-preset="sunset">🌅<span class="ratio-btn-label">Sunset</span></button>
+          <button class="ratio-btn preset-btn" data-preset="ocean">🌊<span class="ratio-btn-label">Ocean</span></button>
+          <button class="ratio-btn preset-btn" data-preset="forest">🌲<span class="ratio-btn-label">Forest</span></button>
+          <button class="ratio-btn preset-btn" data-preset="neon">💜<span class="ratio-btn-label">Neon</span></button>
+          <button class="ratio-btn preset-btn" data-preset="earthy">🍂<span class="ratio-btn-label">Earthy</span></button>
+          <button class="ratio-btn preset-btn" data-preset="pastel">🎀<span class="ratio-btn-label">Pastel</span></button>
+          <button class="ratio-btn preset-btn" data-preset="midnight">🌙<span class="ratio-btn-label">Midnight</span></button>
+          <button class="ratio-btn preset-btn" data-preset="candy">🍬<span class="ratio-btn-label">Candy</span></button>
+          <button class="ratio-btn preset-btn" data-preset="arctic">❄️<span class="ratio-btn-label">Arctic</span></button>
+          <button class="ratio-btn preset-btn" data-preset="vintage">📷<span class="ratio-btn-label">Vintage</span></button>
+          <button class="ratio-btn preset-btn" data-preset="tropical">🌴<span class="ratio-btn-label">Tropical</span></button>
+          <button class="ratio-btn preset-btn" data-preset="monochrome">◼️<span class="ratio-btn-label">Mono</span></button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ─── DOWNLOAD MODAL ─── -->
+  <div class="modal-overlay" id="download-modal">
+    <div class="modal">
+      <div class="modal-title">Download Wallpaper</div>
+
+      <!-- Aspect Ratio -->
+      <div class="modal-section">
+        <div class="modal-label">Aspect Ratio</div>
+        <div class="ratio-grid" id="ratio-grid">
+          <button class="ratio-btn active" data-ratio="16:9">16:9<span class="ratio-btn-label">Landscape</span></button>
+          <button class="ratio-btn" data-ratio="9:16">9:16<span class="ratio-btn-label">Portrait</span></button>
+          <button class="ratio-btn" data-ratio="4:3">4:3<span class="ratio-btn-label">Standard</span></button>
+          <button class="ratio-btn" data-ratio="3:4">3:4<span class="ratio-btn-label">Tablet</span></button>
+          <button class="ratio-btn" data-ratio="1:1">1:1<span class="ratio-btn-label">Square</span></button>
+          <button class="ratio-btn" data-ratio="custom">✏️<span class="ratio-btn-label">Custom</span></button>
+        </div>
+        <div class="custom-res-row" id="custom-ratio-row">
+          <input type="number" class="custom-res-input" id="custom-ratio-w" value="16" min="1" max="32" />
+          <span class="custom-res-x">:</span>
+          <input type="number" class="custom-res-input" id="custom-ratio-h" value="9" min="1" max="32" />
+        </div>
+      </div>
+
+      <!-- Resolution -->
+      <div class="modal-section">
+        <div class="modal-label">Resolution</div>
+        <div class="resolution-grid" id="resolution-grid">
+          <button class="res-btn" data-scale="1">HD<span class="res-btn-size" id="res-hd-size">1920 × 1080</span></button>
+          <button class="res-btn active" data-scale="1.5">Full HD+<span class="res-btn-size" id="res-fhd-size">2880 × 1620</span></button>
+          <button class="res-btn" data-scale="2">2K<span class="res-btn-size" id="res-2k-size">3840 × 2160</span></button>
+          <button class="res-btn" data-scale="2.67">4K<span class="res-btn-size" id="res-4k-size">5120 × 2880</span></button>
+        </div>
+      </div>
+
+      <!-- Format -->
+      <div class="modal-section">
+        <div class="modal-label">Format</div>
+        <div class="format-row">
+          <button class="format-btn active" data-format="png">PNG<span class="ratio-btn-label">Lossless</span></button>
+          <button class="format-btn" data-format="jpeg">JPEG<span class="ratio-btn-label">Smaller file</span></button>
+          <button class="format-btn" data-format="webp">WebP<span class="ratio-btn-label">Modern</span></button>
+        </div>
+        <div class="quality-row" id="quality-row">
+          <div class="slider-group">
+            <div class="slider-header">
+              <span class="slider-label">Quality</span>
+              <span class="slider-value" id="quality-value">92</span>
+            </div>
+            <input type="range" id="quality-slider" min="10" max="100" value="92" />
+          </div>
+        </div>
+      </div>
+
+      <div class="download-size-hint" id="download-size-hint">Estimated: 1920 × 1080 px</div>
+
+      <div class="modal-footer">
+        <button class="btn" id="btn-download-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-download-confirm">
+          <span class="btn-icon">↓</span> Download
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── FULLSCREEN OVERLAY ─── -->
+  <div class="fullscreen-overlay" id="fullscreen-overlay">
+    <canvas id="fullscreen-canvas"></canvas>
+    <div class="fullscreen-controls">
+      <button class="btn" id="btn-fs-generate">⟳ Generate</button>
+      <button class="btn" id="btn-fs-download">↓ Download</button>
+      <button class="btn" id="btn-fs-close">✕ Close</button>
+    </div>
+  </div>
+
+  <!-- ─── TOAST ─── -->
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
