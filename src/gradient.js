@@ -1,39 +1,8 @@
 /**
- * Gradient Wallpaper Engine
- * Generates beautiful gradient textures using Canvas API
+ * Gradient Wallpaper Engine v2
+ * Generates smooth, organic gradient textures using layered radial gradients
+ * Produces results similar to out-of-focus light / mesh gradient style
  */
-
-// Simple Perlin-ish noise for organic distortion
-function createNoiseGrid(width, height, scale) {
-  const grid = [];
-  for (let y = 0; y < height; y++) {
-    grid[y] = [];
-    for (let x = 0; x < width; x++) {
-      grid[y][x] = Math.random();
-    }
-  }
-  return grid;
-}
-
-function smoothNoise(grid, x, y, width, height) {
-  const ix = Math.floor(x) % width;
-  const iy = Math.floor(y) % height;
-  const fx = x - Math.floor(x);
-  const fy = y - Math.floor(y);
-
-  const nx = (ix + 1) % width;
-  const ny = (iy + 1) % height;
-
-  const t1 = grid[iy][ix];
-  const t2 = grid[iy][nx];
-  const t3 = grid[ny][ix];
-  const t4 = grid[ny][nx];
-
-  const i1 = t1 + fx * (t2 - t1);
-  const i2 = t3 + fx * (t4 - t3);
-
-  return i1 + fy * (i2 - i1);
-}
 
 /**
  * Parse hex color to RGB
@@ -51,18 +20,28 @@ function hexToRgb(hex) {
 }
 
 /**
- * Interpolate between colors
+ * Convert RGB to CSS string
  */
-function lerpColor(c1, c2, t) {
-  return {
-    r: Math.round(c1.r + (c2.r - c1.r) * t),
-    g: Math.round(c1.g + (c2.g - c1.g) * t),
-    b: Math.round(c1.b + (c2.b - c1.b) * t)
+function rgbStr(r, g, b, a = 1) {
+  return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
+}
+
+/**
+ * Seeded random number generator
+ */
+function createRng(seed) {
+  let _s = seed || Math.floor(Math.random() * 2147483647);
+  if (_s <= 0) _s = 1;
+  return function() {
+    _s = (_s * 16807) % 2147483647;
+    return (_s & 0x7fffffff) / 0x7fffffff;
   };
 }
 
 /**
- * Generate the gradient wallpaper
+ * Generate the gradient wallpaper using layered radial gradients
+ * This produces smooth, organic mesh-gradient-like results
+ *
  * @param {HTMLCanvasElement} canvas
  * @param {string[]} colors - Array of hex color strings
  * @param {number} chaos - 0 to 100
@@ -73,121 +52,233 @@ export function generateWallpaper(canvas, colors, chaos, grain, seed) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
+  const maxDim = Math.max(w, h);
 
   if (colors.length === 0) return;
 
-  // Seed-based random
-  let _seed = seed || Math.floor(Math.random() * 999999);
-  function seededRandom() {
-    _seed = (_seed * 16807 + 0) % 2147483647;
-    return (_seed & 0x7fffffff) / 0x7fffffff;
-  }
-
-  const rgbColors = colors.map(hexToRgb);
-
-  // Create base gradient layer using pixel manipulation for organic feel
-  const imageData = ctx.createImageData(w, h);
-  const data = imageData.data;
-
+  const rng = createRng(seed);
   const chaosNorm = chaos / 100;
   const grainNorm = grain / 100;
+  const rgbColors = colors.map(hexToRgb);
 
-  // Generate noise grids for distortion
-  const noiseW = 64;
-  const noiseH = 64;
-  const noiseGrid1 = [];
-  const noiseGrid2 = [];
-  for (let y = 0; y < noiseH; y++) {
-    noiseGrid1[y] = [];
-    noiseGrid2[y] = [];
-    for (let x = 0; x < noiseW; x++) {
-      noiseGrid1[y][x] = seededRandom();
-      noiseGrid2[y][x] = seededRandom();
+  // ─── STEP 1: Fill with the darkest color as base ─── //
+  // Find the darkest color for the background
+  let darkestIdx = 0;
+  let darkestLum = Infinity;
+  rgbColors.forEach((c, i) => {
+    const lum = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
+    if (lum < darkestLum) {
+      darkestLum = lum;
+      darkestIdx = i;
     }
-  }
+  });
 
-  // Generate random color control points for organic gradients
-  const numPoints = rgbColors.length + Math.floor(chaosNorm * rgbColors.length * 2);
-  const points = [];
+  // Blend the two darkest for a richer background
+  ctx.fillStyle = `rgb(${rgbColors[darkestIdx].r}, ${rgbColors[darkestIdx].g}, ${rgbColors[darkestIdx].b})`;
+  ctx.fillRect(0, 0, w, h);
+
+  // ─── STEP 2: Generate blob positions ─── //
+  // Each color gets 1-3 large blobs placed strategically
+  const blobs = [];
+
   for (let i = 0; i < rgbColors.length; i++) {
-    // Distribute base colors
-    const angle = (i / rgbColors.length) * Math.PI * 2 + seededRandom() * chaosNorm * Math.PI;
-    const radius = 0.3 + seededRandom() * 0.4;
-    points.push({
-      x: 0.5 + Math.cos(angle) * radius * (0.5 + chaosNorm * 0.5),
-      y: 0.5 + Math.sin(angle) * radius * (0.5 + chaosNorm * 0.5),
-      color: rgbColors[i],
-      weight: 1 + seededRandom() * chaosNorm * 2
-    });
-  }
+    const color = rgbColors[i];
+    // Number of blobs per color: 1-3 depending on chaos
+    const numBlobs = 1 + Math.floor(rng() * (1 + chaosNorm * 2));
 
-  // Add chaos points (interpolated colors)
-  for (let i = rgbColors.length; i < numPoints; i++) {
-    const c1 = rgbColors[Math.floor(seededRandom() * rgbColors.length)];
-    const c2 = rgbColors[Math.floor(seededRandom() * rgbColors.length)];
-    const t = seededRandom();
-    points.push({
-      x: seededRandom(),
-      y: seededRandom(),
-      color: lerpColor(c1, c2, t),
-      weight: 0.5 + seededRandom() * chaosNorm
-    });
-  }
+    for (let j = 0; j < numBlobs; j++) {
+      // Position: distribute around canvas with some randomness
+      const baseAngle = ((i + j * 0.5) / (rgbColors.length * 1.5)) * Math.PI * 2;
+      const spreadRadius = 0.3 + rng() * 0.4;
 
-  // Render pixel by pixel using inverse distance weighting
-  for (let py = 0; py < h; py++) {
-    for (let px = 0; px < w; px++) {
-      const idx = (py * w + px) * 4;
-
-      // Normalized coordinates
-      let nx = px / w;
-      let ny = py / h;
-
-      // Apply noise-based distortion for chaos
-      if (chaosNorm > 0.01) {
-        const noiseScale = 4;
-        const nsx = nx * noiseScale;
-        const nsy = ny * noiseScale;
-        const distort = chaosNorm * 0.3;
-        nx += (smoothNoise(noiseGrid1, nsx, nsy, noiseW, noiseH) - 0.5) * distort;
-        ny += (smoothNoise(noiseGrid2, nsx, nsy, noiseW, noiseH) - 0.5) * distort;
+      let cx, cy;
+      if (j === 0) {
+        // Primary blob: distributed evenly with chaos offset
+        cx = 0.5 + Math.cos(baseAngle) * spreadRadius * (0.6 + chaosNorm * 0.4);
+        cy = 0.5 + Math.sin(baseAngle) * spreadRadius * (0.6 + chaosNorm * 0.4);
+      } else {
+        // Secondary blobs: more random
+        cx = rng();
+        cy = rng();
       }
 
-      // Inverse distance weighted color blending
-      let totalWeight = 0;
-      let rSum = 0, gSum = 0, bSum = 0;
+      // Allow blobs to extend beyond canvas edges for natural look
+      cx = cx * 1.4 - 0.2;
+      cy = cy * 1.4 - 0.2;
 
-      for (const point of points) {
-        const dx = nx - point.x;
-        const dy = ny - point.y;
-        const distSq = dx * dx + dy * dy;
-        const w2 = point.weight / (distSq + 0.001);
-        totalWeight += w2;
-        rSum += point.color.r * w2;
-        gSum += point.color.g * w2;
-        bSum += point.color.b * w2;
-      }
+      // Blob size: large (40-90% of canvas dimension)
+      const radiusBase = 0.4 + rng() * 0.5;
+      const radius = radiusBase * maxDim * (0.6 + chaosNorm * 0.4);
 
-      let r = rSum / totalWeight;
-      let g = gSum / totalWeight;
-      let b = bSum / totalWeight;
+      // Opacity: primary blobs stronger, secondary weaker
+      const opacity = j === 0
+        ? 0.75 + rng() * 0.25
+        : 0.35 + rng() * 0.4;
 
-      // Add grain
-      if (grainNorm > 0.01) {
-        const noise = (seededRandom() - 0.5) * grainNorm * 80;
-        r = Math.max(0, Math.min(255, r + noise));
-        g = Math.max(0, Math.min(255, g + noise));
-        b = Math.max(0, Math.min(255, b + noise));
-      }
-
-      data[idx] = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
-      data[idx + 3] = 255;
+      blobs.push({
+        x: cx * w,
+        y: cy * h,
+        radius,
+        color,
+        opacity,
+        blendMode: j === 0 ? 'normal' : (rng() > 0.5 ? 'screen' : 'normal')
+      });
     }
   }
 
-  ctx.putImageData(imageData, 0, 0);
+  // Shuffle blobs for layering variety
+  for (let i = blobs.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [blobs[i], blobs[j]] = [blobs[j], blobs[i]];
+  }
+
+  // ─── STEP 3: Render blobs as radial gradients ─── //
+  ctx.save();
+
+  for (const blob of blobs) {
+    const { x, y, radius, color, opacity, blendMode } = blob;
+
+    ctx.globalCompositeOperation = blendMode;
+    ctx.globalAlpha = 1;
+
+    // Create a large soft radial gradient
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+
+    // Inner color: fully saturated with opacity
+    grad.addColorStop(0, rgbStr(color.r, color.g, color.b, opacity));
+
+    // Mid transition: soft falloff
+    grad.addColorStop(0.3, rgbStr(color.r, color.g, color.b, opacity * 0.7));
+    grad.addColorStop(0.5, rgbStr(color.r, color.g, color.b, opacity * 0.4));
+    grad.addColorStop(0.7, rgbStr(color.r, color.g, color.b, opacity * 0.15));
+
+    // Outer edge: fully transparent
+    grad.addColorStop(1, rgbStr(color.r, color.g, color.b, 0));
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // ─── STEP 4: Add extra glow highlights (chaos-dependent) ─── //
+  const numHighlights = Math.floor(chaosNorm * 4);
+  for (let i = 0; i < numHighlights; i++) {
+    const colorIdx = Math.floor(rng() * rgbColors.length);
+    const color = rgbColors[colorIdx];
+    const hx = rng() * w;
+    const hy = rng() * h;
+    const hr = (0.15 + rng() * 0.3) * maxDim;
+
+    ctx.globalCompositeOperation = 'screen';
+    const hGrad = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+    hGrad.addColorStop(0, rgbStr(color.r, color.g, color.b, 0.15 + rng() * 0.2));
+    hGrad.addColorStop(0.5, rgbStr(color.r, color.g, color.b, 0.05));
+    hGrad.addColorStop(1, rgbStr(color.r, color.g, color.b, 0));
+    ctx.fillStyle = hGrad;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // ─── STEP 5: Gentle blur for smoothness (1 pass only) ─── //
+  applyCanvasBlur(canvas, ctx, w, h, 1);
+
+  // ─── STEP 6: Subtle vignette for depth ─── //
+  const vignetteGrad = ctx.createRadialGradient(
+    w * 0.5, h * 0.5, Math.min(w, h) * 0.25,
+    w * 0.5, h * 0.5, Math.max(w, h) * 0.75
+  );
+  vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.15)');
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // ─── STEP 7: Add film grain overlay ─── //
+  if (grainNorm > 0.005) {
+    applyGrain(canvas, ctx, w, h, grainNorm, rng);
+  }
+}
+
+/**
+ * Apply smooth blur by downscaling and upscaling
+ * This produces a genuine smooth Gaussian-like effect
+ */
+function applyCanvasBlur(canvas, ctx, w, h, passes) {
+  const scale = 0.25; // Downscale to 25%
+  const sw = Math.max(1, Math.floor(w * scale));
+  const sh = Math.max(1, Math.floor(h * scale));
+
+  // Create offscreen canvases
+  const offA = document.createElement('canvas');
+  offA.width = sw;
+  offA.height = sh;
+  const ctxA = offA.getContext('2d');
+
+  const offB = document.createElement('canvas');
+  offB.width = sw;
+  offB.height = sh;
+  const ctxB = offB.getContext('2d');
+
+  // Smooth interpolation
+  ctxA.imageSmoothingEnabled = true;
+  ctxA.imageSmoothingQuality = 'high';
+  ctxB.imageSmoothingEnabled = true;
+  ctxB.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  for (let p = 0; p < passes; p++) {
+    // Downscale
+    ctxA.drawImage(canvas, 0, 0, w, h, 0, 0, sw, sh);
+
+    // Bounce between offscreen canvases for extra smoothing
+    ctxB.drawImage(offA, 0, 0, sw, sh, 0, 0, sw, sh);
+
+    // Upscale back
+    ctx.drawImage(offB, 0, 0, sw, sh, 0, 0, w, h);
+  }
+}
+
+/**
+ * Apply film grain overlay
+ */
+function applyGrain(canvas, ctx, w, h, grainNorm, rng) {
+  // Use a smaller noise texture and tile it for performance
+  const noiseSize = Math.min(256, Math.min(w, h));
+  const noiseCanvas = document.createElement('canvas');
+  noiseCanvas.width = noiseSize;
+  noiseCanvas.height = noiseSize;
+  const noiseCtx = noiseCanvas.getContext('2d');
+
+  const noiseData = noiseCtx.createImageData(noiseSize, noiseSize);
+  const nd = noiseData.data;
+  const intensity = Math.floor(grainNorm * 50);
+
+  for (let i = 0; i < nd.length; i += 4) {
+    const v = (rng() - 0.5) * intensity;
+    // Monochromatic noise
+    nd[i] = 128 + v;
+    nd[i + 1] = 128 + v;
+    nd[i + 2] = 128 + v;
+    nd[i + 3] = Math.floor(grainNorm * 100); // Opacity based on grain amount
+  }
+
+  noiseCtx.putImageData(noiseData, 0, 0);
+
+  // Composite grain using overlay blend mode
+  ctx.save();
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = grainNorm * 0.8;
+
+  // Tile the noise pattern across the canvas
+  for (let x = 0; x < w; x += noiseSize) {
+    for (let y = 0; y < h; y += noiseSize) {
+      ctx.drawImage(noiseCanvas, x, y);
+    }
+  }
+
+  ctx.restore();
 }
 
 /**
